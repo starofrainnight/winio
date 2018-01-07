@@ -1,0 +1,9 @@
+CompanyName	=	"http://www.internals.com" 
+FileDescription =	"WinIo"
+FileVersion	=	"Version 2.00" 
+InternalName	=	"WinIo"
+LegalCopyright	= 	"Copyright \251 1998-2002, Yariv Kaplan"
+OriginalFilename = 	"winio.vxd"
+ProductName	=	"WinIo"
+ProductVersion	= 	"Version 2.00"
+Translation	=	0x409, 0x4E4
