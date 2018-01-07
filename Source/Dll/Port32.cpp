@@ -1,7 +1,7 @@
 // ---------------------------------------------------- //
-//                      WinIo v2.0                      //
-//  Direct Hardware Access Under Windows 9x/NT/2000/XP  //
-//           Copyright 1998-2002 Yariv Kaplan           //
+//                      WinIo v3.0                      //
+//				 Direct Hardware Access Under Windows	//
+//           Copyright 1998-2010 Yariv Kaplan           //
 //               http://www.internals.com               //
 // ---------------------------------------------------- //
 
@@ -9,95 +9,125 @@
 #include <winioctl.h>
 #include <conio.h>
 #include "port32.h"
-#include "..\drv\nt\winio_nt.h"
-#include "..\drv\9x\winio_9x.h"
+#include "..\drv\winio_nt.h"
 #include "winio.h"
 
 
 bool _stdcall GetPortVal(WORD wPortAddr, PDWORD pdwPortVal, BYTE bSize)
 {
-  tagPort32Struct Port32Struct;
-  DWORD dwBytesReturned;
-  
-  if (!IsWinIoInitialized)
-    return false;
+	if (!IsWinIoInitialized)
+	{
+		return false;
+	}
 
-  if (IsNT)
-  {
-    switch (bSize)
-    {
-      case 1:
+#ifdef _WIN64
+	tagPortStruct PortStruct;
+	DWORD dwBytesReturned;
 
-        *pdwPortVal = _inp(wPortAddr);
+	PortStruct.bSize = bSize;
+	PortStruct.wPortAddr = wPortAddr;
 
-      break;
+	return DeviceIoControl(hDriver, IOCTL_WINIO_READPORT, &PortStruct, sizeof(PortStruct),
+		pdwPortVal, sizeof(DWORD), &dwBytesReturned, NULL);
 
-      case 2:
 
-        *pdwPortVal = _inpw(wPortAddr);
+#elif _WIN32
+	// If this is a 64 bit OS, we must use the driver to access I/O ports even if the application is 32 bit
+	if (g_Is64BitOS)
+	{
+		tagPortStruct PortStruct;
+		DWORD dwBytesReturned;
 
-      break;
+		PortStruct.bSize = bSize;
+		PortStruct.wPortAddr = wPortAddr;
 
-      case 4:
+		return DeviceIoControl(hDriver, IOCTL_WINIO_READPORT, &PortStruct, sizeof(PortStruct),
+			pdwPortVal, sizeof(DWORD), &dwBytesReturned, NULL);
+	}
+	else
+	{
+		switch (bSize)
+		{
+		case 1:
 
-        *pdwPortVal = _inpd(wPortAddr);
+			*pdwPortVal = _inp(wPortAddr);
 
-      break;
-    }
-  }
-  else
-  {
-   Port32Struct.bSize = bSize;
-   Port32Struct.wPortAddr = wPortAddr;
-   
-   return DeviceIoControl(hDriver, WINIO_READPORT, &Port32Struct, sizeof(Port32Struct),
-                          pdwPortVal, sizeof(DWORD), &dwBytesReturned, NULL);
-  }
+			break;
 
-  return true;
+		case 2:
+
+			*pdwPortVal = _inpw(wPortAddr);
+
+			break;
+
+		case 4:
+
+			*pdwPortVal = _inpd(wPortAddr);
+
+			break;
+		}
+	}
+#endif
+
+	return true;
 }
 
 
 bool _stdcall SetPortVal(WORD wPortAddr, DWORD dwPortVal, BYTE bSize)
 {
-  tagPort32Struct Port32Struct;
-  DWORD dwBytesReturned;
+	if (!IsWinIoInitialized)
+	{
+		return false;
+	}
 
-  if (!IsWinIoInitialized)
-    return false;
+#ifdef _WIN64
+	tagPortStruct PortStruct;
+	DWORD dwBytesReturned;
 
-  if (IsNT)
-  {
-    switch (bSize)
-    {
-      case 1:
+	PortStruct.bSize = bSize;
+	PortStruct.dwPortVal = dwPortVal;
+	PortStruct.wPortAddr = wPortAddr;
 
-        _outp(wPortAddr, dwPortVal);
+	return DeviceIoControl(hDriver, IOCTL_WINIO_WRITEPORT, &PortStruct, sizeof(PortStruct),
+		NULL, 0, &dwBytesReturned, NULL);
+#elif _WIN32
+	// If this is a 64 bit OS, we must use the driver to access I/O ports even if the application is 32 bit
+	if (g_Is64BitOS)
+	{
+		tagPortStruct PortStruct;
+		DWORD dwBytesReturned;
 
-      break;
+		PortStruct.bSize = bSize;
+		PortStruct.dwPortVal = dwPortVal;
+		PortStruct.wPortAddr = wPortAddr;
 
-      case 2:
+		return DeviceIoControl(hDriver, IOCTL_WINIO_WRITEPORT, &PortStruct, sizeof(PortStruct),
+			NULL, 0, &dwBytesReturned, NULL);
+	}
+	else
+	{
+		switch (bSize)
+		{
+		case 1:
 
-        _outpw(wPortAddr, (WORD)dwPortVal);
+			_outp(wPortAddr, dwPortVal);
 
-      break;
+			break;
 
-      case 4:
+		case 2:
 
-        _outpd(wPortAddr, dwPortVal);
+			_outpw(wPortAddr, (WORD)dwPortVal);
 
-      break;
-    }
-  }
-  else
-  {
-   Port32Struct.bSize = bSize;
-   Port32Struct.dwPortVal = dwPortVal;
-   Port32Struct.wPortAddr = wPortAddr;
-   
-   return DeviceIoControl(hDriver, WINIO_WRITEPORT, &Port32Struct, sizeof(Port32Struct),
-                          NULL, 0, &dwBytesReturned, NULL);
-  }
-  
-  return true;
+			break;
+
+		case 4:
+
+			_outpd(wPortAddr, dwPortVal);
+
+			break;
+		}
+	}
+#endif
+
+	return true;
 }

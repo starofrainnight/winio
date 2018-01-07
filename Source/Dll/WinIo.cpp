@@ -1,144 +1,176 @@
 // ---------------------------------------------------- //
-//                      WinIo v2.0                      //
-//  Direct Hardware Access Under Windows 9x/NT/2000/XP  //
-//           Copyright 1998-2002 Yariv Kaplan           //
+//                      WinIo v3.0                      //
+//				 Direct Hardware Access Under Windows	//
+//           Copyright 1998-2010 Yariv Kaplan           //
 //               http://www.internals.com               //
 // ---------------------------------------------------- //
 
+#define _WIN32_WINNT 0x0501
+
 #include <windows.h>
 #include <winioctl.h>
-#include "k32call.h"
 #include "phys32.h"
-#include "..\drv\nt\winio_nt.h"
+#include "..\drv\winio_nt.h"
 #include "winio.h"
 
 HANDLE hDriver = INVALID_HANDLE_VALUE;
-bool IsNT;
 bool IsWinIoInitialized = false;
-char szWinIoDriverPath[MAX_PATH];
+wchar_t szWinIoDriverPath[32768];
+bool g_Is64BitOS;
 
 
-bool IsWinNT()
+typedef UINT (WINAPI* GETSYSTEMWOW64DIRECTORY)(LPTSTR, UINT);
+
+BOOL Is64BitOS()
 {
-  OSVERSIONINFO OSVersionInfo;
+#ifdef _WIN64
+	return TRUE;
+#else
+	GETSYSTEMWOW64DIRECTORY getSystemWow64Directory;
+	HMODULE hKernel32;
+	TCHAR Wow64Directory[32767];
 
-  OSVersionInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+	hKernel32 = GetModuleHandle(TEXT("kernel32.dll"));
+	if (hKernel32 == NULL)
+	{
+		//
+		// This shouldn't happen, but if we can't get 
+		// kernel32's module handle then assume we are 
+		// on x86. We won't ever install 32-bit drivers
+		// on 64-bit machines, we just want to catch it 
+		// up front to give users a better error message.
+		//
+		return FALSE;
+	}
 
-  GetVersionEx(&OSVersionInfo);
+	getSystemWow64Directory = (GETSYSTEMWOW64DIRECTORY)GetProcAddress(hKernel32, "GetSystemWow64DirectoryW");
 
-  return OSVersionInfo.dwPlatformId == VER_PLATFORM_WIN32_NT;
+	if (getSystemWow64Directory == NULL)
+	{
+		//
+		// This most likely means we are running 
+		// on Windows 2000, which didn't have this API 
+		// and didn't have a 64-bit counterpart.
+		//
+		return FALSE;
+	}
+
+	if ((getSystemWow64Directory(Wow64Directory, _countof(Wow64Directory)) == 0) &&
+		(GetLastError() == ERROR_CALL_NOT_IMPLEMENTED)) {
+			return FALSE;
+	}
+
+	//
+	// GetSystemWow64Directory succeeded 
+	// so we are on a 64-bit OS.
+	//
+	return TRUE;
+#endif
 }
 
 
 bool GetDriverPath()
 {
-  PSTR pszSlash;
+	PWSTR pszSlash;
 
-  if (!GetModuleFileName(GetModuleHandle(NULL), szWinIoDriverPath, sizeof(szWinIoDriverPath)))
-    return false;
+	if (!GetModuleFileName(GetModuleHandle(NULL), szWinIoDriverPath, sizeof(szWinIoDriverPath)))
+		return false;
 
-  pszSlash = strrchr(szWinIoDriverPath, '\\');
+	pszSlash = wcsrchr(szWinIoDriverPath, '\\');
 
-  if (pszSlash)
-    pszSlash[1] = 0;
-  else
-    return false;
+	if (pszSlash)
+		pszSlash[1] = 0;
+	else
+		return false;
 
-  strcat(szWinIoDriverPath, "winio.sys");
+	if (g_Is64BitOS)
+		wcscat(szWinIoDriverPath, L"winio64.sys");
+	else
+		wcscat(szWinIoDriverPath, L"winio32.sys");
 
-  return true;
+	return true;
 }
 
 
-bool _stdcall InitializeWinIo()
+bool __stdcall InitializeWinIo()
 {
-  bool bResult;
-  DWORD dwBytesReturned;
+	bool bResult;
+	DWORD dwBytesReturned;
 
-  IsNT = IsWinNT();
+	g_Is64BitOS = Is64BitOS();
 
-  if (IsNT)
-  {
-    hDriver = CreateFile("\\\\.\\WINIO",
-                         GENERIC_READ | GENERIC_WRITE,
-                         0,
-                         NULL,
-                         OPEN_EXISTING,
-                         FILE_ATTRIBUTE_NORMAL,
-                         NULL);
+	hDriver = CreateFile(L"\\\\.\\WINIO",
+		GENERIC_READ | GENERIC_WRITE,
+		0,
+		NULL,
+		OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL,
+		NULL);
 
-    // If the driver is not running, install it
+	// If the driver is not running, install it
 
-    if (hDriver == INVALID_HANDLE_VALUE)
-    {
-      GetDriverPath();
+	if (hDriver == INVALID_HANDLE_VALUE)
+	{		
+		GetDriverPath();
 
-      bResult = InstallWinIoDriver(szWinIoDriverPath, true);
+		bResult = InstallWinIoDriver(szWinIoDriverPath, true);
 
-      if (!bResult)
-        return false;
+		if (!bResult)
+			return false;
 
-      bResult = StartWinIoDriver();
+		bResult = StartWinIoDriver();
 
-      if (!bResult)
-        return false;
+		if (!bResult)
+			return false;
 
-      hDriver = CreateFile("\\\\.\\WINIO",
-                           GENERIC_READ | GENERIC_WRITE,
-                           0,
-                           NULL,
-                           OPEN_EXISTING,
-                           FILE_ATTRIBUTE_NORMAL,
-                           NULL);
+		hDriver = CreateFile(L"\\\\.\\WINIO",
+			GENERIC_READ | GENERIC_WRITE,
+			FILE_SHARE_READ | FILE_SHARE_WRITE,
+			NULL,
+			OPEN_EXISTING,
+			FILE_ATTRIBUTE_NORMAL,
+			NULL);
 
-      if (hDriver == INVALID_HANDLE_VALUE)
-        return false;
-    }
+		if (hDriver == INVALID_HANDLE_VALUE)
+			return false;
+	}
 
-    // Enable I/O port access for this process
+	// Enable I/O port access for this process if running on a 32 bit OS
 
-    if (!DeviceIoControl(hDriver, IOCTL_WINIO_ENABLEDIRECTIO, NULL,
-                         0, NULL, 0, &dwBytesReturned, NULL))
-      return false;
+	if (!g_Is64BitOS)
+	{
+		if (!DeviceIoControl(hDriver, IOCTL_WINIO_ENABLEDIRECTIO, NULL,
+			0, NULL, 0, &dwBytesReturned, NULL))
+		{
+			return false;
+		}
+	}
 
-  }
-  else
-  {
-    VxDCall = (DWORD (WINAPI *)(DWORD,DWORD,DWORD))GetK32ProcAddress(1);
+	IsWinIoInitialized = true;
 
-    hDriver = CreateFile("\\\\.\\WINIO.VXD", 0, 0, 0, CREATE_NEW, FILE_FLAG_DELETE_ON_CLOSE, 0);
-
-    if (hDriver == INVALID_HANDLE_VALUE)
-      return false;
-  }
-
-  IsWinIoInitialized = true;
-
-  return true;
+	return true;
 }
 
 
 void _stdcall ShutdownWinIo()
 {
-  DWORD dwBytesReturned;
+	DWORD dwBytesReturned;
 
-  if (IsNT)
-  {
-    if (hDriver != INVALID_HANDLE_VALUE)
-    {
-      // Disable I/O port access
+	if (hDriver != INVALID_HANDLE_VALUE)
+	{
+		// Disable I/O port access if running on a 32 bit OS
 
-      DeviceIoControl(hDriver, IOCTL_WINIO_DISABLEDIRECTIO, NULL,
-                      0, NULL, 0, &dwBytesReturned, NULL);
+		if (!g_Is64BitOS)
+		{
+			DeviceIoControl(hDriver, IOCTL_WINIO_DISABLEDIRECTIO, NULL,
+				0, NULL, 0, &dwBytesReturned, NULL);
+		}
 
-      CloseHandle(hDriver);
+		CloseHandle(hDriver);
 
-    }
+	}
 
-    RemoveWinIoDriver();
-  }
-  else
-    CloseHandle(hDriver);
+	RemoveWinIoDriver();
 
-  IsWinIoInitialized = false;
+	IsWinIoInitialized = false;
 }

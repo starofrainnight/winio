@@ -1,7 +1,4 @@
-LIBRARY WINIO
-
 EXPORTS
-
 InitializeWinIo
 ShutdownWinIo
 MapPhysToLin
