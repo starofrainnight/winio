@@ -11,3 +11,5 @@ This library was written by Yariv Kaplan, which could be download from www.inter
 Because www.internals.com is down latest, I couldn't download it, so fork this useful library for backup purpose.
 
 The tag 2.0 is the version that supported win9X.
+
+Lastest viewable content from www.internals.com could be access from [archive.org](http://web.archive.org/web/20160410042019/http://www.internals.com/) .
