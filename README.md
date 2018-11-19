@@ -6,6 +6,8 @@ The WinIo library allows 32-bit and 64-bit Windows applications to directly acce
 
 This library was written by Yariv Kaplan, which could be download from www.internals.com.
 
+**WARNING!** This library is strictly copyrighted! All rights are claimed belongs to Yariv Kaplan (even the codes you modified). You must read the LICENESE of WinIo library carefully if you want to use this library (neither generated binaries or source code).
+
 ## Why have this repository?
 
 Because www.internals.com is down latest, I couldn't download it, so fork this useful library for backup purpose.
@@ -15,10 +17,10 @@ The tag 2.0 is the version that supported win9X.
 Lastest viewable content from www.internals.com could be access from [archive.org](http://web.archive.org/web/20160410042019/http://www.internals.com/) .
 
 ## Redistributable Files
- 
+
 The redistributable files are provided in the \binaries directory (WinIo32.dll, WinIo32.sys and WinIo64.dll) and should be included in the installation package for your application. The WinIo64.sys file must be replaced with a version that is signed with a public code signing certificate (see below).
- 
-The WinIo files must be placed in the same directory as your application's executable file. 
+
+The WinIo files must be placed in the same directory as your application's executable file.
 
 ## Privilege Requirements
 
@@ -37,7 +39,7 @@ The included C# samples demonstrate using an embedded manifest file to request p
 - Open an elevated command window by right-clicking the icon and clicking "Run as Administrator".
 - Type the following command to enable test-signing:
 
-    bcdedit.exe /set TESTSIGNING ON
+  bcdedit.exe /set TESTSIGNING ON
 
 - Reboot the machine
 
